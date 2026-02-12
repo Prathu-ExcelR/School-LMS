@@ -1,5 +1,6 @@
 import './App.css'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/Navbar'
 import { HeroScrollDemo } from './components/HeroScrollDemo'
 import TrustedBy from './components/TrustedBy'
@@ -8,6 +9,7 @@ import InfoSection from './components/InfoSection'
 import CTASection from './components/CTASection'
 import Footer from './components/Footer'
 import Login from './components/Login'
+import Signup from './components/Signup'
 import Dashboard from './components/Dashboard'
 import MyCourses from './components/MyCourses'
 import BrowseCourses from './components/BrowseCourses'
@@ -32,43 +34,46 @@ import TeacherAnalytics from './components/TeacherAnalytics'
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <>
-              <Navbar />
-              <HeroScrollDemo />
-              <TrustedBy />
-              <Features />
-              <InfoSection />
-              <CTASection />
-              <Footer />
-            </>
-          }
-        />
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/my-courses" element={<MyCourses />} />
-        <Route path="/browse-courses" element={<BrowseCourses />} />
-        <Route path="/quizzes" element={<Quizzes />} />
-        <Route path="/progress" element={<Progress />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/teachers" element={<AdminTeachers />} />
-        <Route path="/admin/classes" element={<AdminClasses />} />
-        <Route path="/admin/subjects" element={<AdminSubjects />} />
-        <Route path="/admin/students" element={<AdminStudents />} />
-        <Route path="/admin/enrollments" element={<AdminEnrollments />} />
-        <Route path="/admin/reports" element={<AdminReports />} />
-        <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
-        <Route path="/teacher/subjects" element={<TeacherSubjects />} />
-        <Route path="/teacher/units" element={<TeacherUnits />} />
-        <Route path="/teacher/materials" element={<TeacherMaterials />} />
-        <Route path="/teacher/quizzes" element={<TeacherQuizzes />} />
-        <Route path="/teacher/students" element={<TeacherStudents />} />
-        <Route path="/teacher/attendance" element={<TeacherAttendance />} />
-        <Route path="/teacher/analytics" element={<TeacherAnalytics />} />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                <Navbar />
+                <HeroScrollDemo />
+                <TrustedBy />
+                <Features />
+                <InfoSection />
+                <CTASection />
+                <Footer />
+              </>
+            }
+          />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/my-courses" element={<MyCourses />} />
+          <Route path="/browse-courses" element={<BrowseCourses />} />
+          <Route path="/quizzes" element={<Quizzes />} />
+          <Route path="/progress" element={<Progress />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/teachers" element={<AdminTeachers />} />
+          <Route path="/admin/classes" element={<AdminClasses />} />
+          <Route path="/admin/subjects" element={<AdminSubjects />} />
+          <Route path="/admin/students" element={<AdminStudents />} />
+          <Route path="/admin/enrollments" element={<AdminEnrollments />} />
+          <Route path="/admin/reports" element={<AdminReports />} />
+          <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
+          <Route path="/teacher/subjects" element={<TeacherSubjects />} />
+          <Route path="/teacher/units" element={<TeacherUnits />} />
+          <Route path="/teacher/materials" element={<TeacherMaterials />} />
+          <Route path="/teacher/quizzes" element={<TeacherQuizzes />} />
+          <Route path="/teacher/students" element={<TeacherStudents />} />
+          <Route path="/teacher/attendance" element={<TeacherAttendance />} />
+          <Route path="/teacher/analytics" element={<TeacherAnalytics />} />
+        </Routes>
+      </AuthProvider>
     </Router>
   )
 }
