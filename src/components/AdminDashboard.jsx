@@ -1,13 +1,36 @@
+import { useEffect, useState } from 'react'
 import AdminSidebar from './AdminSidebar'
+import { getDashboardStats } from '../services/adminService'
 
 function AdminDashboard() {
-  const stats = [
-    { title: 'Total Teachers', value: '24', icon: 'person', color: 'bg-blue-500' },
-    { title: 'Total Students', value: '342', icon: 'school', color: 'bg-green-500' },
-    { title: 'Total Classes', value: '12', icon: 'class', color: 'bg-purple-500' },
-    { title: 'Total Subjects', value: '18', icon: 'menu_book', color: 'bg-orange-500' },
-    { title: 'Active Courses', value: '45', icon: 'auto_stories', color: 'bg-indigo-500' },
-    { title: 'Total Enrollments', value: '1,248', icon: 'assignment_turned_in', color: 'bg-teal-500' }
+  const [stats, setStats] = useState({
+    totalTeachers: 0,
+    totalStudents: 0,
+    totalClasses: 0,
+    totalSubjects: 0,
+    totalEnrollments: 0
+  })
+
+  useEffect(() => {
+    loadStats()
+  }, [])
+
+  const loadStats = async () => {
+    try {
+      const data = await getDashboardStats()
+      setStats(data)
+    } catch (error) {
+      console.error('Error loading stats:', error)
+    }
+  }
+
+  const statCards = [
+    { title: 'Total Teachers', value: stats.totalTeachers, icon: 'person', color: 'bg-blue-500' },
+    { title: 'Total Students', value: stats.totalStudents, icon: 'school', color: 'bg-green-500' },
+    { title: 'Total Classes', value: stats.totalClasses, icon: 'class', color: 'bg-purple-500' },
+    { title: 'Total Subjects', value: stats.totalSubjects, icon: 'menu_book', color: 'bg-orange-500' },
+    { title: 'Active Courses', value: stats.totalSubjects, icon: 'auto_stories', color: 'bg-indigo-500' },
+    { title: 'Total Enrollments', value: stats.totalEnrollments, icon: 'assignment_turned_in', color: 'bg-teal-500' }
   ]
 
   return (
@@ -21,7 +44,7 @@ function AdminDashboard() {
         
         <div className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {stats.map((stat, idx) => (
+            {statCards.map((stat, idx) => (
               <div key={idx} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>

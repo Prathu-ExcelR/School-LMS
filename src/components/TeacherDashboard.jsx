@@ -1,13 +1,68 @@
+import { useEffect, useState } from 'react'
 import TeacherSidebar from './TeacherSidebar'
+import { getTeacherAssignedData } from '../services/teacherService'
+import { supabase } from '../lib/supabaseClient'
 
 function TeacherDashboard() {
-  const stats = [
-    { title: 'Assigned Subjects', value: '3', icon: 'menu_book', color: 'bg-blue-500' },
-    { title: 'Total Students', value: '127', icon: 'school', color: 'bg-green-500' },
-    { title: 'Units Created', value: '18', icon: 'library_books', color: 'bg-purple-500' },
-    { title: 'Pending Reviews', value: '5', icon: 'rate_review', color: 'bg-orange-500' },
-    { title: 'Avg Performance', value: '78%', icon: 'trending_up', color: 'bg-teal-500' }
+  const [stats, setStats] = useState({
+    assignedSubjects: 0,
+    totalStudents: 0,
+    unitsCreated: 0,
+    avgPerformance: '0%'
+  })
+  const [subjects, setSubjects] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadTeacherData()
+  }, [])
+
+  const loadTeacherData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const assignments = await getTeacherAssignedData(user.id)
+      
+      // Get unique subjects
+      const uniqueSubjects = [...new Map(assignments.map(a => [a.subject.id, a.subject])).values()]
+      setSubjects(uniqueSubjects)
+      
+      setStats({
+        assignedSubjects: uniqueSubjects.length,
+        totalStudents: 0, // TODO: Calculate from enrollments
+        unitsCreated: 0, // TODO: Calculate from units
+        avgPerformance: '0%' // TODO: Calculate from quiz results
+      })
+      
+      setLoading(false)
+    } catch (error) {
+      console.error('Error loading teacher data:', error)
+      setLoading(false)
+    }
+  }
+
+  const statCards = [
+    { title: 'Assigned Subjects', value: stats.assignedSubjects, icon: 'menu_book', color: 'bg-blue-500' },
+    { title: 'Total Students', value: stats.totalStudents, icon: 'school', color: 'bg-green-500' },
+    { title: 'Units Created', value: stats.unitsCreated, icon: 'library_books', color: 'bg-purple-500' },
+    { title: 'Pending Reviews', value: '0', icon: 'rate_review', color: 'bg-orange-500' },
+    { title: 'Avg Performance', value: stats.avgPerformance, icon: 'trending_up', color: 'bg-teal-500' }
   ]
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-slate-50">
+        <TeacherSidebar />
+        <main className="flex-1 flex items-center justify-center ml-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+            <p className="mt-4 text-slate-600">Loading...</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   const recentActivity = [
     { action: 'Quiz completed', student: 'Alex Johnson', subject: 'Mathematics', time: '2 hours ago' },
@@ -26,7 +81,7 @@ function TeacherDashboard() {
 
         <div className="p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-            {stats.map((stat, idx) => (
+            {statCards.map((stat, idx) => (
               <div key={idx} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-12 h-12 ${stat.color} rounded-xl flex items-center justify-center text-white`}>
@@ -43,22 +98,22 @@ function TeacherDashboard() {
             <div className="bg-white rounded-xl p-6 border border-slate-200">
               <h3 className="text-lg font-bold text-slate-800 mb-4">My Subjects</h3>
               <div className="space-y-3">
-                {[
-                  { name: 'Mathematics', class: 'Class 3', students: 45, units: 8, color: 'bg-blue-500' },
-                  { name: 'Science', class: 'Class 10', students: 52, units: 6, color: 'bg-green-500' },
-                  { name: 'Physics', class: 'Class 10', students: 30, units: 4, color: 'bg-purple-500' }
-                ].map((subject, idx) => (
-                  <div key={idx} className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
-                    <div className={`w-12 h-12 ${subject.color} rounded-lg flex items-center justify-center text-white font-bold`}>
-                      {subject.name[0]}
+                {subjects.length === 0 ? (
+                  <p className="text-slate-500 text-center py-4">No subjects assigned yet</p>
+                ) : (
+                  subjects.map((subject, idx) => (
+                    <div key={idx} className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer">
+                      <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">
+                        {subject.name[0]}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-slate-800">{subject.name}</h4>
+                        <p className="text-xs text-slate-500">0 Students • 0 Units</p>
+                      </div>
+                      <span className="material-icons-round text-slate-400">arrow_forward</span>
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-slate-800">{subject.name}</h4>
-                      <p className="text-xs text-slate-500">{subject.class} • {subject.students} Students • {subject.units} Units</p>
-                    </div>
-                    <span className="material-icons-round text-slate-400">arrow_forward</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 

@@ -1,13 +1,124 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminSidebar from './AdminSidebar'
+import { getTeachers, addTeacher, updateTeacher, deleteTeacher, getClasses, getSubjects, assignTeacherToSubjects, getTeacherAssignments } from '../services/adminService'
 
 function AdminTeachers() {
   const [showModal, setShowModal] = useState(false)
-  const [teachers] = useState([
-    { id: 1, name: 'Lana Smith', email: 'lana@school.com', phone: '123-456-7890', classes: 'Class 3, Class 10', subjects: 'Maths, Science', status: 'Active' },
-    { id: 2, name: 'John Doe', email: 'john@school.com', phone: '123-456-7891', classes: 'Class 5', subjects: 'English', status: 'Active' },
-    { id: 3, name: 'Sarah Johnson', email: 'sarah@school.com', phone: '123-456-7892', classes: 'Class 8', subjects: 'History', status: 'Active' }
-  ])
+  const [teachers, setTeachers] = useState([])
+  const [classes, setClasses] = useState([])
+  const [allSubjects, setAllSubjects] = useState([])
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '' })
+  const [selectedClasses, setSelectedClasses] = useState([])
+  const [selectedSubjects, setSelectedSubjects] = useState([])
+  const [teacherAssignments, setTeacherAssignments] = useState({})
+  const [editingId, setEditingId] = useState(null)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    try {
+      const [teachersData, classesData, subjectsData] = await Promise.all([
+        getTeachers(),
+        getClasses(),
+        getSubjects()
+      ])
+      setTeachers(teachersData)
+      setClasses(classesData)
+      setAllSubjects(subjectsData)
+      
+      // Load assignments for each teacher
+      const assignments = {}
+      for (const teacher of teachersData) {
+        const teacherAssigns = await getTeacherAssignments(teacher.id)
+        assignments[teacher.id] = teacherAssigns
+      }
+      setTeacherAssignments(assignments)
+    } catch (error) {
+      console.error('Error loading data:', error)
+    }
+  }
+
+  const handleClassToggle = (classId) => {
+    setSelectedClasses(prev => 
+      prev.includes(classId) 
+        ? prev.filter(id => id !== classId)
+        : [...prev, classId]
+    )
+  }
+
+  const handleSubjectToggle = (subjectId) => {
+    setSelectedSubjects(prev => 
+      prev.includes(subjectId)
+        ? prev.filter(id => id !== subjectId)
+        : [...prev, subjectId]
+    )
+  }
+
+  const getAvailableSubjects = () => {
+    return allSubjects.filter(subject => 
+      selectedClasses.includes(subject.class_id)
+    )
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    try {
+      if (editingId) {
+        // Only update name and phone, not email (email is unique)
+        await updateTeacher(editingId, { name: formData.name, phone: formData.phone })
+      } else {
+        const newTeacher = await addTeacher(formData)
+        
+        const assignments = selectedSubjects.map(subjectId => {
+          const subject = allSubjects.find(s => s.id === subjectId)
+          return {
+            subject_id: subjectId,
+            class_id: subject.class_id
+          }
+        })
+        
+        if (assignments.length > 0) {
+          await assignTeacherToSubjects(newTeacher.id, assignments)
+        }
+      }
+      
+      setShowModal(false)
+      setFormData({ name: '', email: '', phone: '' })
+      setSelectedClasses([])
+      setSelectedSubjects([])
+      setEditingId(null)
+      loadData()
+    } catch (error) {
+      console.error('Error saving teacher:', error)
+      alert('Error saving teacher: ' + error.message)
+    }
+  }
+
+  const handleEdit = (teacher) => {
+    setEditingId(teacher.id)
+    setFormData({ name: teacher.name, email: teacher.email, phone: teacher.phone || '' })
+    setShowModal(true)
+  }
+
+  const handleDelete = async (id) => {
+    if (confirm('Are you sure you want to delete this teacher?')) {
+      try {
+        await deleteTeacher(id)
+        loadData()
+      } catch (error) {
+        console.error('Error deleting teacher:', error)
+      }
+    }
+  }
+
+  const getTeacherClassesAndSubjects = (teacherId) => {
+    const assignments = teacherAssignments[teacherId] || []
+    const classes = [...new Set(assignments.map(a => a.class?.name))].filter(Boolean).join(', ')
+    const subjects = [...new Set(assignments.map(a => a.subject?.name))].filter(Boolean).join(', ')
+    return { classes: classes || '-', subjects: subjects || '-' }
+  }
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -42,30 +153,33 @@ function AdminTeachers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {teachers.map((teacher) => (
+                {teachers.map((teacher) => {
+                  const { classes: teacherClasses, subjects: teacherSubjects } = getTeacherClassesAndSubjects(teacher.id)
+                  return (
                   <tr key={teacher.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4 text-sm font-medium text-slate-800">{teacher.name}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{teacher.email}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{teacher.phone}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{teacher.classes}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{teacher.subjects}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{teacher.phone || 'N/A'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{teacherClasses}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{teacherSubjects}</td>
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                        {teacher.status}
+                        Active
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
-                        <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
+                        <button onClick={() => handleEdit(teacher)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
                           <span className="material-icons-round text-sm">edit</span>
                         </button>
-                        <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
+                        <button onClick={() => handleDelete(teacher.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
                           <span className="material-icons-round text-sm">delete</span>
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -73,32 +187,100 @@ function AdminTeachers() {
       </main>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">Add New Teacher</h2>
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-                <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input type="email" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-                <input type="password" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-slate-800 mb-4">{editingId ? 'Edit Teacher' : 'Add New Teacher'}</h2>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                  <input 
+                    type="text" 
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    required
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                  <input 
+                    type="email" 
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    required
+                    disabled={editingId}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed" 
+                  />
+                  {editingId && <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Phone (Optional)</label>
-                <input type="tel" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                <input 
+                  type="tel" 
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                />
               </div>
-              <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
+
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-slate-700 mb-3">Assign Classes (Select Multiple)</label>
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-slate-200 rounded-lg">
+                  {classes.map(cls => (
+                    <label key={cls.id} className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer">
+                      <input 
+                        type="checkbox"
+                        checked={selectedClasses.includes(cls.id)}
+                        onChange={() => handleClassToggle(cls.id)}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700">{cls.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {selectedClasses.length > 0 && (
+                <div className="border-t pt-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-3">
+                    Assign Subjects (Based on Selected Classes)
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto p-2 border border-slate-200 rounded-lg">
+                    {getAvailableSubjects().map(subject => (
+                      <label key={subject.id} className="flex items-center gap-2 p-3 hover:bg-slate-50 rounded cursor-pointer border border-slate-100">
+                        <input 
+                          type="checkbox"
+                          checked={selectedSubjects.includes(subject.id)}
+                          onChange={() => handleSubjectToggle(subject.id)}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-slate-700">{subject.name}</span>
+                          <span className="text-xs text-slate-500 ml-2">({subject.class?.name})</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {getAvailableSubjects().length === 0 && (
+                    <p className="text-sm text-slate-500 text-center py-4">No subjects available for selected classes. Please add subjects first.</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-6 pt-4 border-t">
+                <button type="button" onClick={() => {
+                  setShowModal(false)
+                  setFormData({ name: '', email: '', phone: '' })
+                  setSelectedClasses([])
+                  setSelectedSubjects([])
+                  setEditingId(null)
+                }} className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
                   Cancel
                 </button>
                 <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                  Add Teacher
+                  {editingId ? 'Update Teacher' : 'Add Teacher'}
                 </button>
               </div>
             </form>

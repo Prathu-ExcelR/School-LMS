@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabaseClient'
 
 function Login() {
   const [selectedRole, setSelectedRole] = useState('Student')
@@ -35,9 +36,40 @@ function Login() {
         return
       }
 
-      // Get role from user metadata, fall back to selected role
-      const userRole = data?.user?.user_metadata?.role || selectedRole
-      const redirectPath = roleRedirects[userRole] || '/dashboard'
+      // Get user role from database
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+
+      if (userError) {
+        setError('Unable to fetch user data')
+        setIsLoading(false)
+        return
+      }
+
+      // Validate selected role matches actual role
+      const actualRole = userData.role
+      const selectedRoleLower = selectedRole.toLowerCase()
+      
+      if (actualRole !== selectedRoleLower) {
+        // Sign out the user
+        await supabase.auth.signOut()
+        setError(`Invalid credentials. Please select the correct role (${actualRole.charAt(0).toUpperCase() + actualRole.slice(1)})`)
+        setIsLoading(false)
+        return
+      }
+
+      // Redirect based on database role
+      const roleMap = {
+        'student': '/dashboard',
+        'teacher': '/teacher/dashboard',
+        'parent': '/dashboard',
+        'admin': '/admin/dashboard'
+      }
+      
+      const redirectPath = roleMap[actualRole] || '/dashboard'
       navigate(redirectPath)
     } catch (err) {
       setError('An unexpected error occurred. Please try again.')
