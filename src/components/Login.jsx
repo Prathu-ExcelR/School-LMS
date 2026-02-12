@@ -14,8 +14,11 @@ function Login() {
     e.preventDefault()
     
     // Hardcoded credentials check
-    if (email === 'student@gmail.com' && password === 'stud@906') {
-      // Login successful - redirect to dashboard
+    if (email === 'admin@gmail.com' && password === 'admin@123') {
+      navigate('/admin/dashboard')
+    } else if (email === 'teacher@gmail.com' && password === 'teacher@123') {
+      navigate('/teacher/dashboard')
+    } else if (email === 'student@gmail.com' && password === 'stud@906') {
       navigate('/dashboard')
     } else {
       setError('Invalid credentials. Please try again.')
