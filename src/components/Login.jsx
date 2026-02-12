@@ -1,27 +1,47 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 function Login() {
   const [selectedRole, setSelectedRole] = useState('Student')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
+  const { signIn } = useAuth()
 
   const roles = ['Student', 'Teacher', 'Parent', 'Admin']
 
-  const handleSubmit = (e) => {
+  // Map role to dashboard route
+  const roleRedirects = {
+    Student: '/dashboard',
+    Teacher: '/teacher/dashboard',
+    Parent: '/dashboard',
+    Admin: '/admin/dashboard',
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    // Hardcoded credentials check
-    if (email === 'admin@gmail.com' && password === 'admin@123') {
-      navigate('/admin/dashboard')
-    } else if (email === 'teacher@gmail.com' && password === 'teacher@123') {
-      navigate('/teacher/dashboard')
-    } else if (email === 'student@gmail.com' && password === 'stud@906') {
-      navigate('/dashboard')
-    } else {
-      setError('Invalid credentials. Please try again.')
+    setError('')
+    setIsLoading(true)
+
+    try {
+      const { data, error: signInError } = await signIn(email, password)
+
+      if (signInError) {
+        setError(signInError.message)
+        setIsLoading(false)
+        return
+      }
+
+      // Get role from user metadata, fall back to selected role
+      const userRole = data?.user?.user_metadata?.role || selectedRole
+      const redirectPath = roleRedirects[userRole] || '/dashboard'
+      navigate(redirectPath)
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.')
+      setIsLoading(false)
     }
   }
 
@@ -103,11 +123,10 @@ function Login() {
               <button
                 key={role}
                 onClick={() => setSelectedRole(role)}
-                className={`py-2 text-xs font-semibold rounded-md transition-all ${
-                  selectedRole === role
+                className={`py-2 text-xs font-semibold rounded-md transition-all ${selectedRole === role
                     ? 'bg-white text-blue-500 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 {role}
               </button>
@@ -176,13 +195,34 @@ function Login() {
             </div>
 
             <button
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3.5 rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 group"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3.5 rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 group disabled:opacity-60 disabled:cursor-not-allowed"
               type="submit"
+              disabled={isLoading}
             >
-              <span>Sign In to Dashboard</span>
-              <span className="material-icons text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Signing In...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Dashboard</span>
+                  <span className="material-icons text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                </>
+              )}
             </button>
           </form>
+
+          {/* Sign Up Link */}
+          <p className="mt-8 text-center text-sm text-gray-500">
+            Don't have an account?{' '}
+            <Link to="/signup" className="font-semibold text-blue-500 hover:text-blue-600 hover:underline">
+              Create an account
+            </Link>
+          </p>
         </div>
       </div>
 
