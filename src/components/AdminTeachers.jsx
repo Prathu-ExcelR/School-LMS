@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import AdminSidebar from './AdminSidebar'
 import { getTeachers, addTeacher, updateTeacher, deleteTeacher, getClasses, getSubjects, assignTeacherToSubjects, getTeacherAssignments } from '../services/adminService'
+import { supabase } from '../lib/supabaseClient'
 
 function AdminTeachers() {
   const [showModal, setShowModal] = useState(false)
@@ -12,6 +13,7 @@ function AdminTeachers() {
   const [selectedSubjects, setSelectedSubjects] = useState([])
   const [teacherAssignments, setTeacherAssignments] = useState({})
   const [editingId, setEditingId] = useState(null)
+  const [loadingAssignments, setLoadingAssignments] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -66,9 +68,36 @@ function AdminTeachers() {
     e.preventDefault()
     try {
       if (editingId) {
-        // Only update name and phone, not email (email is unique)
-        await updateTeacher(editingId, { name: formData.name, phone: formData.phone })
+        // Update teacher info
+        const updatedTeacher = await updateTeacher(editingId, { 
+          name: formData.name, 
+          phone: formData.phone 
+        })
+        
+        // Update assignments - first delete existing, then add new
+        // Delete existing assignments
+        await supabase
+          .from('teacher_assignments')
+          .delete()
+          .eq('teacher_id', editingId)
+        
+        // Add new assignments
+        if (selectedSubjects.length > 0) {
+          const assignments = selectedSubjects.map(subjectId => {
+            const subject = allSubjects.find(s => s.id === subjectId)
+            return {
+              teacher_id: editingId,
+              subject_id: subjectId,
+              class_id: subject.class_id
+            }
+          })
+          
+          await assignTeacherToSubjects(editingId, assignments)
+        }
+        
+        console.log('Teacher updated successfully:', updatedTeacher)
       } else {
+        // Add new teacher
         const newTeacher = await addTeacher(formData)
         
         const assignments = selectedSubjects.map(subjectId => {
@@ -96,9 +125,32 @@ function AdminTeachers() {
     }
   }
 
-  const handleEdit = (teacher) => {
+  const handleEdit = async (teacher) => {
     setEditingId(teacher.id)
     setFormData({ name: teacher.name, email: teacher.email, phone: teacher.phone || '' })
+    setLoadingAssignments(true)
+    
+    // Load existing assignments for this teacher
+    try {
+      const assignments = await getTeacherAssignments(teacher.id)
+      
+      // Set selected classes based on existing assignments
+      const classIds = [...new Set(assignments.map(a => a.class_id))].filter(Boolean)
+      setSelectedClasses(classIds)
+      
+      // Set selected subjects based on existing assignments
+      const subjectIds = assignments.map(a => a.subject_id).filter(Boolean)
+      setSelectedSubjects(subjectIds)
+      
+    } catch (error) {
+      console.error('Error loading teacher assignments:', error)
+      // Reset selections if loading fails
+      setSelectedClasses([])
+      setSelectedSubjects([])
+    } finally {
+      setLoadingAssignments(false)
+    }
+    
     setShowModal(true)
   }
 
@@ -190,6 +242,14 @@ function AdminTeachers() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto">
           <div className="bg-white rounded-xl p-6 w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-slate-800 mb-4">{editingId ? 'Edit Teacher' : 'Add New Teacher'}</h2>
+            
+            {loadingAssignments && editingId && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span className="text-sm text-blue-700">Loading existing assignments...</span>
+              </div>
+            )}
+            
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="grid grid-cols-2 gap-4">
                 <div>
