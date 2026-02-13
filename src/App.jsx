@@ -32,6 +32,9 @@ import TeacherQuizzes from './components/TeacherQuizzes'
 import TeacherStudents from './components/TeacherStudents'
 import TeacherAttendance from './components/TeacherAttendance'
 import TeacherAnalytics from './components/TeacherAnalytics'
+import ParentDashboard from './components/parent/ParentDashboard'
+import ParentProgress from './components/parent/ParentProgress'
+import ParentResults from './components/parent/ParentResults'
 
 function App() {
   return (
@@ -89,6 +92,11 @@ function App() {
           <Route path="/teacher/students" element={<TeacherStudents />} />
           <Route path="/teacher/attendance" element={<TeacherAttendance />} />
           <Route path="/teacher/analytics" element={<TeacherAnalytics />} />
+
+          {/* Parent Routes */}
+          <Route path="/parent/dashboard" element={<ParentDashboard />} />
+          <Route path="/parent/progress" element={<ParentProgress />} />
+          <Route path="/parent/results" element={<ParentResults />} />
         </Routes>
       </AuthProvider>
     </Router>

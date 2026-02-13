@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabaseClient'
+import { getAllStudents } from '../services/parentService'
 
 function Signup() {
     const [selectedRole, setSelectedRole] = useState('Student')
@@ -10,8 +11,11 @@ function Signup() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [selectedClassId, setSelectedClassId] = useState('')
+    const [selectedStudentId, setSelectedStudentId] = useState('')
     const [classes, setClasses] = useState([])
+    const [students, setStudents] = useState([])
     const [classesLoading, setClassesLoading] = useState(true)
+    const [studentsLoading, setStudentsLoading] = useState(false)
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     // Not using AuthContext signUp to avoid auto-signin
@@ -36,6 +40,24 @@ function Signup() {
         }
         fetchClasses()
     }, [])
+
+    // Fetch students when Parent role is selected
+    useEffect(() => {
+        if (selectedRole === 'Parent') {
+            const fetchStudents = async () => {
+                setStudentsLoading(true)
+                try {
+                    const data = await getAllStudents()
+                    setStudents(data || [])
+                } catch (err) {
+                    console.error('Error fetching students:', err)
+                } finally {
+                    setStudentsLoading(false)
+                }
+            }
+            fetchStudents()
+        }
+    }, [selectedRole])
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -62,6 +84,12 @@ function Signup() {
             return
         }
 
+        // Require student selection for parents
+        if (selectedRole === 'Parent' && !selectedStudentId) {
+            setError('Please select your child from the list.')
+            return
+        }
+
         setIsLoading(true)
 
         try {
@@ -76,13 +104,18 @@ function Signup() {
                 metadata.class_id = selectedClassId
             }
 
+            // Add student_id for parents
+            if (selectedRole === 'Parent' && selectedStudentId) {
+                metadata.student_id = selectedStudentId
+            }
+
             // Create auth user but prevent automatic session sign-in
             // Temporarily disable auth state listener to prevent global session override
-            
+
             // Store current auth state
             const { data: currentSession } = await supabase.auth.getSession()
             const currentUserId = currentSession?.session?.user?.id
-            
+
             const { data, error: signUpError } = await supabase.auth.signUp({
                 email,
                 password,
@@ -101,7 +134,7 @@ function Signup() {
             // Create user record in users table
             if (data?.user) {
                 console.log('Creating user record for:', data.user.id, email, fullName);
-                
+
                 const userRecord = {
                     id: data.user.id,
                     name: fullName,
@@ -128,8 +161,25 @@ function Signup() {
                     setIsLoading(false)
                     return
                 }
-                
+
                 console.log('User record created successfully:', insertData);
+
+                // Create parent-student relationship for Parent role
+                if (selectedRole === 'Parent' && selectedStudentId) {
+                    const { error: relationError } = await supabase
+                        .from('parent_students')
+                        .insert({
+                            parent_id: data.user.id,
+                            student_id: selectedStudentId
+                        })
+
+                    if (relationError) {
+                        console.error('Error creating parent-student relation:', relationError)
+                        // Don't fail the whole signup, just log the error
+                    } else {
+                        console.log('Parent-student relationship created successfully')
+                    }
+                }
             } else {
                 console.error('No user data returned from signup:', data);
                 setError('Account creation failed - no user data received.')
@@ -208,178 +258,213 @@ function Signup() {
                     </Link>
 
                     <>
-                            <div className="mb-8">
-                                <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
-                                <p className="text-gray-500">Fill in your details to get started with EduPulse.</p>
+                        <div className="mb-8">
+                            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
+                            <p className="text-gray-500">Fill in your details to get started with EduPulse.</p>
+                        </div>
+
+                        {/* Error Message */}
+                        {error && (
+                            <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-lg">
+                                {error}
+                            </div>
+                        )}
+
+                        {/* Role Selector */}
+                        <div className="grid grid-cols-4 gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
+                            {roles.map((role) => (
+                                <button
+                                    key={role}
+                                    type="button"
+                                    onClick={() => setSelectedRole(role)}
+                                    className={`py-2 text-xs font-semibold rounded-md transition-all ${selectedRole === role
+                                        ? 'bg-white text-blue-500 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                        }`}
+                                >
+                                    {role}
+                                </button>
+                            ))}
+                        </div>
+
+                        <form className="space-y-5" onSubmit={handleSubmit}>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="fullName">
+                                    Full Name
+                                </label>
+                                <div className="relative">
+                                    <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                        person_outline
+                                    </span>
+                                    <input
+                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
+                                        id="fullName"
+                                        name="fullName"
+                                        placeholder="John Doe"
+                                        type="text"
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Error Message */}
-                            {error && (
-                                <div className="mb-6 p-3 bg-red-50 text-red-600 text-sm rounded-lg">
-                                    {error}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="signup-email">
+                                    Email Address
+                                </label>
+                                <div className="relative">
+                                    <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                        mail_outline
+                                    </span>
+                                    <input
+                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
+                                        id="signup-email"
+                                        name="email"
+                                        placeholder="name@school.edu"
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Class Dropdown — shown only for Students */}
+                            {selectedRole === 'Student' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="classSelect">
+                                        Select Your Class <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                            class
+                                        </span>
+                                        <select
+                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none appearance-none cursor-pointer"
+                                            id="classSelect"
+                                            value={selectedClassId}
+                                            onChange={(e) => setSelectedClassId(e.target.value)}
+                                        >
+                                            <option value="">
+                                                {classesLoading ? 'Loading classes...' : '-- Select your class --'}
+                                            </option>
+                                            {classes.map((cls) => (
+                                                <option key={cls.id} value={cls.id}>
+                                                    {cls.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg pointer-events-none">
+                                            expand_more
+                                        </span>
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Role Selector */}
-                            <div className="grid grid-cols-4 gap-2 mb-6 p-1 bg-gray-100 rounded-lg">
-                                {roles.map((role) => (
-                                    <button
-                                        key={role}
-                                        type="button"
-                                        onClick={() => setSelectedRole(role)}
-                                        className={`py-2 text-xs font-semibold rounded-md transition-all ${selectedRole === role
-                                                ? 'bg-white text-blue-500 shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-700'
-                                            }`}
-                                    >
-                                        {role}
-                                    </button>
-                                ))}
+                            {/* Student Dropdown — shown only for Parents */}
+                            {selectedRole === 'Parent' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="studentSelect">
+                                        Select Your Child <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                            person
+                                        </span>
+                                        <select
+                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none appearance-none cursor-pointer"
+                                            id="studentSelect"
+                                            value={selectedStudentId}
+                                            onChange={(e) => setSelectedStudentId(e.target.value)}
+                                        >
+                                            <option value="">
+                                                {studentsLoading ? 'Loading students...' : '-- Select your child --'}
+                                            </option>
+                                            {students.map((student) => (
+                                                <option key={student.id} value={student.id}>
+                                                    {student.name} {student.class ? `(${student.class.name})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg pointer-events-none">
+                                            expand_more
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Select your child's account to link your parent account.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="signup-password">
+                                    Password
+                                </label>
+                                <div className="relative">
+                                    <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                        lock_outline
+                                    </span>
+                                    <input
+                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
+                                        id="signup-password"
+                                        name="password"
+                                        placeholder="Min. 6 characters"
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                </div>
                             </div>
 
-                            <form className="space-y-5" onSubmit={handleSubmit}>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="fullName">
-                                        Full Name
-                                    </label>
-                                    <div className="relative">
-                                        <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                                            person_outline
-                                        </span>
-                                        <input
-                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
-                                            id="fullName"
-                                            name="fullName"
-                                            placeholder="John Doe"
-                                            type="text"
-                                            value={fullName}
-                                            onChange={(e) => setFullName(e.target.value)}
-                                        />
-                                    </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="confirmPassword">
+                                    Confirm Password
+                                </label>
+                                <div className="relative">
+                                    <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                        lock_outline
+                                    </span>
+                                    <input
+                                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
+                                        id="confirmPassword"
+                                        name="confirmPassword"
+                                        placeholder="Re-enter your password"
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                    />
                                 </div>
+                            </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="signup-email">
-                                        Email Address
-                                    </label>
-                                    <div className="relative">
-                                        <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                                            mail_outline
-                                        </span>
-                                        <input
-                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
-                                            id="signup-email"
-                                            name="email"
-                                            placeholder="name@school.edu"
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Class Dropdown — shown only for Students */}
-                                {selectedRole === 'Student' && (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="classSelect">
-                                            Select Your Class <span className="text-red-500">*</span>
-                                        </label>
-                                        <div className="relative">
-                                            <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                                                class
-                                            </span>
-                                            <select
-                                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none appearance-none cursor-pointer"
-                                                id="classSelect"
-                                                value={selectedClassId}
-                                                onChange={(e) => setSelectedClassId(e.target.value)}
-                                            >
-                                                <option value="">
-                                                    {classesLoading ? 'Loading classes...' : '-- Select your class --'}
-                                                </option>
-                                                {classes.map((cls) => (
-                                                    <option key={cls.id} value={cls.id}>
-                                                        {cls.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg pointer-events-none">
-                                                expand_more
-                                            </span>
-                                        </div>
-                                    </div>
+                            <button
+                                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3.5 rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 group disabled:opacity-60 disabled:cursor-not-allowed"
+                                type="submit"
+                                disabled={isLoading}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span>Creating Account...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Create Account</span>
+                                        <span className="material-icons text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
+                                    </>
                                 )}
+                            </button>
+                        </form>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="signup-password">
-                                        Password
-                                    </label>
-                                    <div className="relative">
-                                        <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                                            lock_outline
-                                        </span>
-                                        <input
-                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
-                                            id="signup-password"
-                                            name="password"
-                                            placeholder="Min. 6 characters"
-                                            type="password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="confirmPassword">
-                                        Confirm Password
-                                    </label>
-                                    <div className="relative">
-                                        <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                                            lock_outline
-                                        </span>
-                                        <input
-                                            className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none"
-                                            id="confirmPassword"
-                                            name="confirmPassword"
-                                            placeholder="Re-enter your password"
-                                            type="password"
-                                            value={confirmPassword}
-                                            onChange={(e) => setConfirmPassword(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                <button
-                                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3.5 rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 group disabled:opacity-60 disabled:cursor-not-allowed"
-                                    type="submit"
-                                    disabled={isLoading}
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            <span>Creating Account...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span>Create Account</span>
-                                            <span className="material-icons text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                                        </>
-                                    )}
-                                </button>
-                            </form>
-
-                            {/* Sign In Link */}
-                            <p className="mt-8 text-center text-sm text-gray-500">
-                                Already have an account?{' '}
-                                <Link to="/login" className="font-semibold text-blue-500 hover:text-blue-600 hover:underline">
-                                    Sign In
-                                </Link>
-                            </p>
-                        </>
+                        {/* Sign In Link */}
+                        <p className="mt-8 text-center text-sm text-gray-500">
+                            Already have an account?{' '}
+                            <Link to="/login" className="font-semibold text-blue-500 hover:text-blue-600 hover:underline">
+                                Sign In
+                            </Link>
+                        </p>
+                    </>
                 </div>
             </div>
 

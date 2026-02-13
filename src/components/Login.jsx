@@ -18,7 +18,7 @@ function Login() {
   const roleRedirects = {
     Student: '/student/dashboard',
     Teacher: '/teacher/dashboard',
-    Parent: '/student/dashboard',
+    Parent: '/parent/dashboard',
     Admin: '/admin/dashboard',
   }
 
@@ -38,7 +38,7 @@ function Login() {
 
       // Debug: Check if user exists in users table
       console.log('Attempting to fetch user data for ID:', data.user.id);
-      
+
       // First check if user record exists (allow multiple results to see duplicates)
       const { data: userRecords, error: existsError } = await supabase
         .from('users')
@@ -48,7 +48,7 @@ function Login() {
       if (existsError) {
         console.error('Error checking user existence:', existsError)
       }
-      
+
       console.log('User records found:', userRecords);
       console.log('Number of user records:', userRecords?.length || 0);
 
@@ -79,7 +79,7 @@ function Login() {
       // Validate selected role matches actual role
       const actualRole = userData.role
       const selectedRoleLower = selectedRole.toLowerCase()
-      
+
       if (actualRole !== selectedRoleLower) {
         // Sign out the user
         await supabase.auth.signOut()
@@ -92,10 +92,10 @@ function Login() {
       const roleMap = {
         'student': '/student/dashboard',
         'teacher': '/teacher/dashboard',
-        'parent': '/student/dashboard',
+        'parent': '/parent/dashboard',
         'admin': '/admin/dashboard'
       }
-      
+
       const redirectPath = roleMap[actualRole] || '/dashboard'
       navigate(redirectPath)
     } catch (err) {
@@ -183,8 +183,8 @@ function Login() {
                 key={role}
                 onClick={() => setSelectedRole(role)}
                 className={`py-2 text-xs font-semibold rounded-md transition-all ${selectedRole === role
-                    ? 'bg-white text-blue-500 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-white text-blue-500 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
                   }`}
               >
                 {role}
