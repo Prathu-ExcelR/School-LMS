@@ -1,259 +1,248 @@
-import { Link } from 'react-router-dom'
-import Sidebar from './Sidebar'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import StudentSidebar from './StudentSidebar'
+import { supabase } from '../lib/supabaseClient'
+import { getEnrolledSubjects, getSubjectUnits, getUnitMaterials } from '../services/studentService'
 
 function MyCourses() {
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [subjects, setSubjects] = useState([])
+  const [expandedSubject, setExpandedSubject] = useState(null)
+  const [units, setUnits] = useState([])
+  const [unitsLoading, setUnitsLoading] = useState(false)
+  const [expandedUnit, setExpandedUnit] = useState(null)
+  const [materials, setMaterials] = useState([])
+  const [materialsLoading, setMaterialsLoading] = useState(false)
+
+  useEffect(() => {
+    loadSubjects()
+  }, [])
+
+  const loadSubjects = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { navigate('/login'); return }
+      const data = await getEnrolledSubjects(user.id)
+      setSubjects(data)
+    } catch (err) {
+      console.error('Error loading subjects:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSubjectClick = async (subjectId) => {
+    if (expandedSubject === subjectId) {
+      setExpandedSubject(null)
+      setUnits([])
+      setExpandedUnit(null)
+      setMaterials([])
+      return
+    }
+    setExpandedSubject(subjectId)
+    setExpandedUnit(null)
+    setMaterials([])
+    setUnitsLoading(true)
+    try {
+      const data = await getSubjectUnits(subjectId)
+      setUnits(data)
+    } catch (err) {
+      console.error('Error loading units:', err)
+    } finally {
+      setUnitsLoading(false)
+    }
+  }
+
+  const handleUnitClick = async (unitId) => {
+    if (expandedUnit === unitId) {
+      setExpandedUnit(null)
+      setMaterials([])
+      return
+    }
+    setExpandedUnit(unitId)
+    setMaterialsLoading(true)
+    try {
+      const data = await getUnitMaterials(unitId)
+      setMaterials(data)
+    } catch (err) {
+      console.error('Error loading materials:', err)
+    } finally {
+      setMaterialsLoading(false)
+    }
+  }
+
+  // Get a viewable URL for the material
+  const getMaterialUrl = (mat) => {
+    // If file_url exists (external link / already public URL), use it directly
+    if (mat.file_url) return mat.file_url
+    // If file_path exists (uploaded to Supabase Storage), get public URL
+    if (mat.file_path) {
+      const { data } = supabase.storage.from('materials').getPublicUrl(mat.file_path)
+      return data?.publicUrl || '#'
+    }
+    return '#'
+  }
+
+  const getFileIcon = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'pdf': return 'picture_as_pdf'
+      case 'video': return 'play_circle'
+      case 'link': return 'link'
+      case 'document': return 'description'
+      default: return 'insert_drive_file'
+    }
+  }
+
+  const getFileColor = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'pdf': return 'text-red-500 bg-red-50'
+      case 'video': return 'text-purple-500 bg-purple-50'
+      case 'link': return 'text-blue-500 bg-blue-50'
+      case 'document': return 'text-emerald-500 bg-emerald-50'
+      default: return 'text-slate-500 bg-slate-50'
+    }
+  }
+
+  const subjectIcons = ['functions', 'science', 'history_edu', 'palette', 'language', 'computer', 'psychology', 'biotech']
+  const subjectColors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-pink-500', 'bg-cyan-500', 'bg-purple-500', 'bg-teal-500', 'bg-orange-500']
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-[#f6f6f8]">
+        <StudentSidebar />
+        <main className="flex-1 flex items-center justify-center ml-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5048e5] mx-auto"></div>
+            <p className="mt-4 text-slate-500">Loading your subjects...</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
-    <div className="bg-[#f6f7f8] dark:bg-[#101922] text-slate-800 dark:text-white font-display min-h-screen flex overflow-hidden">
-      <Sidebar />
-      {/* Main Content */}
+    <div className="flex h-screen overflow-hidden bg-[#f6f6f8]">
+      <StudentSidebar />
+
       <main className="ml-64 flex-1 flex flex-col min-h-screen">
-        {/* Header */}
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-20 flex items-center justify-between px-8 sticky top-0 z-20">
+        <header className="bg-white border-b border-slate-200 h-20 flex items-center justify-between px-8 sticky top-0 z-20">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-white">My Enrolled Courses</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Welcome back! You have 2 assignments due today.</p>
+            <h1 className="text-2xl font-bold text-slate-800">My Enrolled Subjects</h1>
+            <p className="text-sm text-slate-500">Click a subject to explore its units and materials</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <input className="pl-10 pr-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border-none text-sm focus:ring-2 focus:ring-primary w-64 text-slate-600 dark:text-slate-200" placeholder="Search courses..." type="text"/>
-              <span className="material-icons-outlined absolute left-3 top-2 text-slate-400 text-lg">search</span>
-            </div>
-            <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors">
-              <span className="material-icons-outlined">notifications</span>
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-900"></span>
-            </button>
-          </div>
+          <Link to="/student/browse" className="px-4 py-2 bg-[#5048e5] text-white rounded-lg font-medium hover:bg-[#5048e5]/90 transition-colors flex items-center gap-2">
+            <span className="material-icons-round text-sm">add</span>
+            Browse More
+          </Link>
         </header>
-        {/* Content Area */}
+
         <div className="p-8 flex-1 overflow-y-auto">
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-            {/* Tabs */}
-            <div className="bg-white dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 inline-flex shadow-sm">
-              <button className="px-4 py-2 rounded text-sm font-medium bg-primary text-white shadow-sm transition-all">
-                In Progress
-              </button>
-              <button className="px-4 py-2 rounded text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
-                Completed
-              </button>
-              <button className="px-4 py-2 rounded text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
-                All Courses
-              </button>
+          {subjects.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+              <span className="material-icons-round text-7xl text-slate-300 mb-4">menu_book</span>
+              <h3 className="text-xl font-bold text-slate-700 mb-2">No Enrolled Subjects</h3>
+              <p className="text-slate-500 mb-6 max-w-md mx-auto">You haven't enrolled in any subjects yet. Browse available courses to get started.</p>
+              <Link to="/student/browse" className="px-8 py-3 bg-[#5048e5] text-white font-bold rounded-lg hover:bg-[#5048e5]/90 transition-colors inline-flex items-center gap-2">
+                <span className="material-icons-round">explore</span>
+                Browse Courses
+              </Link>
             </div>
-            {/* Sort */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-500 dark:text-slate-400">Sort by:</label>
-              <select className="form-select bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded text-sm py-2 pl-3 pr-8 focus:ring-primary focus:border-primary">
-                <option>Last Accessed</option>
-                <option>Progress (Low to High)</option>
-                <option>Progress (High to Low)</option>
-                <option>Alphabetical</option>
-              </select>
+          ) : (
+            <div className="space-y-4">
+              {subjects.map((enrollment, idx) => (
+                <div key={enrollment.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  {/* Subject Card Header */}
+                  <button
+                    onClick={() => handleSubjectClick(enrollment.subject?.id)}
+                    className="w-full flex items-center gap-4 p-5 hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <div className={`w-14 h-14 ${subjectColors[idx % subjectColors.length]} rounded-xl flex items-center justify-center text-white shadow-md`}>
+                      <span className="material-icons-round text-2xl">{subjectIcons[idx % subjectIcons.length]}</span>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-slate-900">{enrollment.subject?.name}</h3>
+                      <p className="text-sm text-slate-500">{enrollment.subject?.class?.name || 'General'} • {enrollment.subject?.description || 'No description'}</p>
+                    </div>
+                    <span className={`material-icons-round text-slate-400 transition-transform ${expandedSubject === enrollment.subject?.id ? 'rotate-180' : ''}`}>
+                      expand_more
+                    </span>
+                  </button>
+
+                  {/* Units Panel */}
+                  {expandedSubject === enrollment.subject?.id && (
+                    <div className="border-t border-slate-100 bg-slate-50/50">
+                      {unitsLoading ? (
+                        <div className="p-6 text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5048e5] mx-auto"></div>
+                          <p className="mt-2 text-sm text-slate-500">Loading units...</p>
+                        </div>
+                      ) : units.length === 0 ? (
+                        <div className="p-6 text-center text-slate-500">
+                          <span className="material-icons-round text-3xl text-slate-300">folder_off</span>
+                          <p className="mt-2 text-sm">No units available for this subject yet</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {units.map((unit, uidx) => (
+                            <div key={unit.id}>
+                              <button
+                                onClick={() => handleUnitClick(unit.id)}
+                                className="w-full flex items-center gap-3 px-6 py-4 hover:bg-white transition-colors text-left"
+                              >
+                                <div className="w-8 h-8 bg-[#5048e5]/10 rounded-lg flex items-center justify-center text-[#5048e5] text-sm font-bold">
+                                  {uidx + 1}
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-semibold text-slate-800">{unit.name}</h4>
+                                  {unit.description && <p className="text-xs text-slate-500 mt-0.5">{unit.description}</p>}
+                                </div>
+                                <span className={`material-icons-round text-sm text-slate-400 transition-transform ${expandedUnit === unit.id ? 'rotate-180' : ''}`}>
+                                  expand_more
+                                </span>
+                              </button>
+
+                              {/* Materials Panel */}
+                              {expandedUnit === unit.id && (
+                                <div className="bg-white border-t border-slate-100 pl-14 pr-6 py-3">
+                                  {materialsLoading ? (
+                                    <p className="text-sm text-slate-500 py-2">Loading materials...</p>
+                                  ) : materials.length === 0 ? (
+                                    <p className="text-sm text-slate-400 py-2">No materials uploaded yet</p>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {materials.map((mat) => (
+                                        <a
+                                          key={mat.id}
+                                          href={getMaterialUrl(mat)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                                        >
+                                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getFileColor(mat.material_type)}`}>
+                                            <span className="material-icons-round">{getFileIcon(mat.material_type)}</span>
+                                          </div>
+                                          <div className="flex-1">
+                                            <p className="text-sm font-medium text-slate-800 group-hover:text-[#5048e5] transition-colors">{mat.title}</p>
+                                            <p className="text-xs text-slate-400 capitalize">{mat.material_type || 'File'}</p>
+                                          </div>
+                                          <span className="material-icons-round text-slate-300 group-hover:text-[#5048e5] transition-colors text-sm">open_in_new</span>
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          </div>
-          {/* Course Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {/* Card 1 */}
-            <article className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group">
-              <div className="relative h-40 overflow-hidden">
-                <img alt="Abstract math symbols on blackboard" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2gkQpvyqoKUUdSLemXa8wk0s173yv8OcGn1X1StafRsuTQxUxlEWy4yqAAKSUT9oga-qNu1c_p6tXHh_QWk5mpHjH9BwMMIWNbguHxzGU7xsqrmfPUYQvFYJwvnNhMNb60I3gsEYVI55RqN48Ts3LMDdZlYqA7p_nBmdoUFa9yBMfT4r8rQfGiyG5nYiO4MdO7Z87LBieUa5ythupB-GNN6A7pritYrFCn5P6CNTXmIEUkbKG_DKJLUy4AFh2t6mjhHgICtBLp_Q"/>
-                <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-primary shadow-sm">
-                  Math
-                </div>
-              </div>
-              <div className="p-5 flex flex-col flex-1">
-                <div className="mb-4 flex-1">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1" title="Advanced Calculus II">Advanced Calculus II</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <span className="material-icons-outlined text-sm">person</span>
-                    Dr. Sarah Mitchell
-                  </p>
-                </div>
-                <div className="space-y-3 mt-auto">
-                  <div className="flex justify-between items-end text-xs font-medium">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="text-primary">65%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-primary h-2 rounded-full transition-all duration-1000" style={{width: '65%'}}></div>
-                  </div>
-                  <button className="w-full mt-4 bg-primary hover:bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 group/btn">
-                    <span>Continue Learning</span>
-                    <span className="material-icons-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-                  </button>
-                </div>
-              </div>
-            </article>
-            {/* Card 2 */}
-            <article className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group">
-              <div className="relative h-40 overflow-hidden">
-                <img alt="Laptop displaying code" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpbfmyTmPnMHuKmjv2TFyvXjNGTninFZHAjcv_c_v5z1mfKKFtaKFCmJMCBygbg2o3NKK_-_7AL3kJcffE9z2x0VOr4X6bFNnQP2w500KzYxL8aVw10ODLTdEVTjiFt3UN3LlWdvC4oozDtCE-qvd10I9GwHpNCQY7WLdmWdeOEEEVaJ8Qx0CMp6bWW6_6KMBhjMUJdE3zsohaZ0HYA3HscwzTwMv1MBVnFDJhDUQ1K1nHz5Nla2A6eqmi4cGbUyDQOJhoua8YnhM"/>
-                <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-purple-600 shadow-sm">
-                  CS
-                </div>
-              </div>
-              <div className="p-5 flex flex-col flex-1">
-                <div className="mb-4 flex-1">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1" title="Web Development Fundamentals">Web Dev Fundamentals</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <span className="material-icons-outlined text-sm">person</span>
-                    Prof. Alan Turing
-                  </p>
-                </div>
-                <div className="space-y-3 mt-auto">
-                  <div className="flex justify-between items-end text-xs font-medium">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="text-primary">32%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-primary h-2 rounded-full transition-all duration-1000" style={{width: '32%'}}></div>
-                  </div>
-                  <button className="w-full mt-4 bg-primary hover:bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 group/btn">
-                    <span>Continue Learning</span>
-                    <span className="material-icons-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-                  </button>
-                </div>
-              </div>
-            </article>
-            {/* Card 3 */}
-            <article className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group">
-              <div className="relative h-40 overflow-hidden">
-                <img alt="Person looking at business charts" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWdXg4p--kSq3toKPe2Ois63pttDFvKC8Ut31V7YtfAf15OzY770rx8oIRO8xbyESN56V4GWH7ovtA6QAwthVpQGyMJPO_u5yzCN5eslnx57-wf3Voz5FvC7wNb4hUyYHjDAFuMIubmuc6u_xMNPnR4LKPwbozjXSx4CLLdeFYWtAZ3KmtOGRorKBW_iYSOzz8egBUjMSjPpZtTfbb9rTmw613jWPfdirdIb0sdAqzUOBjns93KbzvGIp1cmCE1CAblMVNMKx_2Dc"/>
-                <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-green-600 shadow-sm">
-                  Business
-                </div>
-              </div>
-              <div className="p-5 flex flex-col flex-1">
-                <div className="mb-4 flex-1">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1" title="Introduction to Business Ethics">Intro to Business Ethics</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <span className="material-icons-outlined text-sm">person</span>
-                    Mrs. Linda Cole
-                  </p>
-                </div>
-                <div className="space-y-3 mt-auto">
-                  <div className="flex justify-between items-end text-xs font-medium">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="text-primary">88%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-primary h-2 rounded-full transition-all duration-1000" style={{width: '88%'}}></div>
-                  </div>
-                  <button className="w-full mt-4 bg-primary hover:bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 group/btn">
-                    <span>Continue Learning</span>
-                    <span className="material-icons-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-                  </button>
-                </div>
-              </div>
-            </article>
-            {/* Card 4 */}
-            <article className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group">
-              <div className="relative h-40 overflow-hidden">
-                <img alt="Colorful paint palettes" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBw9BqubyUDL2N9P-7eTDt-izegywrJKRrVG_3yabAMsQ8g4iLPwOOMnKLs7s1_fcM_-eNxCL6pBnGL2hYOF6XbNrH8i8z411X2S6bscdJld1W1i08JCEYgyPiynTyCyezysQyc-52aCHC5TNTsXfVLpa7VV_ex9qja-CtDeV1pjnMZqSyQzmfWw3EOaikWyVeX6C7vXTKkhu1JLtwEM7Kz3d4DB5X44TuXEDbOn9-SaLpaB8XdKB4995EHVBAo2DPuKCfchgi9fI4"/>
-                <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-pink-600 shadow-sm">
-                  Art
-                </div>
-              </div>
-              <div className="p-5 flex flex-col flex-1">
-                <div className="mb-4 flex-1">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1" title="Modern Art History 101">Modern Art History 101</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <span className="material-icons-outlined text-sm">person</span>
-                    Mr. Pablo P.
-                  </p>
-                </div>
-                <div className="space-y-3 mt-auto">
-                  <div className="flex justify-between items-end text-xs font-medium">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="text-slate-400">0%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-primary h-2 rounded-full transition-all duration-1000 w-0"></div>
-                  </div>
-                  <button className="w-full mt-4 border border-primary text-primary hover:bg-primary/5 font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 group/btn">
-                    <span>Start Course</span>
-                    <span className="material-icons-outlined text-sm group-hover/btn:translate-x-1 transition-transform">play_arrow</span>
-                  </button>
-                </div>
-              </div>
-            </article>
-            {/* Card 5 */}
-            <article className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group">
-              <div className="relative h-40 overflow-hidden">
-                <img alt="DNA helix illustration" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgUG8owBGWorW4MXlX2HgoU9ei__3hSWqHDNxvKYDu7IhymYQhD3e3vmJJQ9SSTLZKqczZitvgOFoiGCGkKuwqm95SzKxTXme8Ha1C2dZWtE7__Pfvpj2kvmtWhXk60wFLvZrdB71Dg_fxrj4YTtgX1-TkzmpdWz_H4vhW9sji-J_EwEXJjx-Z-8iuIlam6EPd8DB2iKZBTl68yJNk0OinG_bZm7YWUaDfbEJ8OwfUMw9X0hXi9-0wzK_EaYxCDT8GrC-KLq0zzAU"/>
-                <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-green-500 shadow-sm">
-                  Biology
-                </div>
-              </div>
-              <div className="p-5 flex flex-col flex-1">
-                <div className="mb-4 flex-1">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1" title="Molecular Biology">Molecular Biology</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <span className="material-icons-outlined text-sm">person</span>
-                    Dr. Watson
-                  </p>
-                </div>
-                <div className="space-y-3 mt-auto">
-                  <div className="flex justify-between items-end text-xs font-medium">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="text-primary">45%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-primary h-2 rounded-full transition-all duration-1000" style={{width: '45%'}}></div>
-                  </div>
-                  <button className="w-full mt-4 bg-primary hover:bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 group/btn">
-                    <span>Continue Learning</span>
-                    <span className="material-icons-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-                  </button>
-                </div>
-              </div>
-            </article>
-            {/* Card 6 */}
-            <article className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group">
-              <div className="relative h-40 overflow-hidden">
-                <img alt="Old historic book" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBZJ0W78JkBtZTNYGwCX_8mEDVMN1e_FCxLh5OzLzZRI0a8c9u0xjNfwglY2hbQM5v-ddtu3UT3XeDh21iczIso1oIBA8KZoEy04ojrHeMDhPRG6azf0oYctdqdoshG6o-aX6tw1nirZhc114CRpkaUlsW4lMVhomhnvEU41N-NxcMCgEryZ_utT6Oe5SopjNNgULMVZyBPBv7Dwugj6l1jB9KQtpdB-o7oUaHNk91D9MoYpyveQJgjl4_DQlL_tfWEuBH5yOR8VNA"/>
-                <div className="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-2 py-1 rounded text-xs font-semibold text-yellow-600 shadow-sm">
-                  History
-                </div>
-              </div>
-              <div className="p-5 flex flex-col flex-1">
-                <div className="mb-4 flex-1">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1 line-clamp-1" title="European History: 1900-1950">European History: 1900-1950</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <span className="material-icons-outlined text-sm">person</span>
-                    Prof. Churchill
-                  </p>
-                </div>
-                <div className="space-y-3 mt-auto">
-                  <div className="flex justify-between items-end text-xs font-medium">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="text-primary">12%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-primary h-2 rounded-full transition-all duration-1000" style={{width: '12%'}}></div>
-                  </div>
-                  <button className="w-full mt-4 bg-primary hover:bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 group/btn">
-                    <span>Continue Learning</span>
-                    <span className="material-icons-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
-                  </button>
-                </div>
-              </div>
-            </article>
-          </div>
-          {/* Pagination */}
-          <div className="mt-10 flex justify-center">
-            <nav className="flex gap-2">
-              <button className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50" disabled="">
-                <span className="material-icons-outlined text-sm">chevron_left</span>
-              </button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-white text-sm font-medium">1</button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium">2</button>
-              <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium">3</button>
-              <button className="p-2 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800">
-                <span className="material-icons-outlined text-sm">chevron_right</span>
-              </button>
-            </nav>
-          </div>
+          )}
         </div>
       </main>
     </div>
@@ -261,3 +250,4 @@ function MyCourses() {
 }
 
 export default MyCourses
+

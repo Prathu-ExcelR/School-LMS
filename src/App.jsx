@@ -1,5 +1,5 @@
 import './App.css'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/Navbar'
 import { HeroScrollDemo } from './components/HeroScrollDemo'
@@ -15,6 +15,8 @@ import MyCourses from './components/MyCourses'
 import BrowseCourses from './components/BrowseCourses'
 import Quizzes from './components/Quizzes'
 import Progress from './components/Progress'
+import StudentResults from './components/StudentResults'
+import StudentProfile from './components/StudentProfile'
 import AdminDashboard from './components/AdminDashboard'
 import AdminTeachers from './components/AdminTeachers'
 import AdminClasses from './components/AdminClasses'
@@ -52,11 +54,24 @@ function App() {
           />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/my-courses" element={<MyCourses />} />
-          <Route path="/browse-courses" element={<BrowseCourses />} />
-          <Route path="/quizzes" element={<Quizzes />} />
-          <Route path="/progress" element={<Progress />} />
+
+          {/* Student Routes */}
+          <Route path="/student/dashboard" element={<Dashboard />} />
+          <Route path="/student/my-subjects" element={<MyCourses />} />
+          <Route path="/student/browse" element={<BrowseCourses />} />
+          <Route path="/student/quizzes" element={<Quizzes />} />
+          <Route path="/student/progress" element={<Progress />} />
+          <Route path="/student/results" element={<StudentResults />} />
+          <Route path="/student/profile" element={<StudentProfile />} />
+
+          {/* Legacy student routes — redirect to new paths */}
+          <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
+          <Route path="/my-courses" element={<Navigate to="/student/my-subjects" replace />} />
+          <Route path="/browse-courses" element={<Navigate to="/student/browse" replace />} />
+          <Route path="/quizzes" element={<Navigate to="/student/quizzes" replace />} />
+          <Route path="/progress" element={<Navigate to="/student/progress" replace />} />
+
+          {/* Admin Routes */}
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/teachers" element={<AdminTeachers />} />
           <Route path="/admin/classes" element={<AdminClasses />} />
@@ -64,6 +79,8 @@ function App() {
           <Route path="/admin/students" element={<AdminStudents />} />
           <Route path="/admin/enrollments" element={<AdminEnrollments />} />
           <Route path="/admin/reports" element={<AdminReports />} />
+
+          {/* Teacher Routes */}
           <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
           <Route path="/teacher/subjects" element={<TeacherSubjects />} />
           <Route path="/teacher/units" element={<TeacherUnits />} />

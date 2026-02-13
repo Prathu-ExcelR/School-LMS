@@ -51,20 +51,30 @@ export const updateTeacher = async (id, updates) => {
 
 export const deleteTeacher = async (id) => {
   // First delete teacher assignments (foreign key constraint)
+  console.log('Deleting assignments for teacher:', id)
   const { error: assignError } = await supabase
     .from('teacher_assignments')
     .delete()
     .eq('teacher_id', id)
   
-  if (assignError) throw assignError
+  if (assignError) {
+    console.error('Error deleting teacher assignments:', assignError)
+    throw assignError
+  }
   
   // Then delete from users table
+  console.log('Deleting user record for teacher:', id)
   const { error: userError } = await supabase
     .from('users')
     .delete()
     .eq('id', id)
   
-  if (userError) throw userError
+  if (userError) {
+    console.error('Error deleting teacher from users table:', userError)
+    throw userError
+  }
+  
+  console.log('Teacher deleted successfully from database')
   
   // Finally delete from auth (requires admin privileges)
   // Note: This requires service role key, not anon key
@@ -115,7 +125,10 @@ export const getSubjects = async () => {
     .select(`
       *,
       class:classes(name),
-      teacher:users(name)
+      teacher:users(name),
+      assignments:teacher_assignments(
+        teacher:users(name)
+      )
     `)
   if (error) throw error
   return data

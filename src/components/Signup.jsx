@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabaseClient'
 
 function Signup() {
     const [selectedRole, setSelectedRole] = useState('Student')
@@ -8,16 +9,42 @@ function Signup() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
+    const [selectedClassId, setSelectedClassId] = useState('')
+    const [classes, setClasses] = useState([])
+    const [classesLoading, setClassesLoading] = useState(true)
     const [error, setError] = useState('')
-    const [success, setSuccess] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const { signUp } = useAuth()
+    // Not using AuthContext signUp to avoid auto-signin
 
     const roles = ['Student', 'Teacher', 'Parent', 'Admin']
+
+    // Fetch classes on mount
+    useEffect(() => {
+        const fetchClasses = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('classes')
+                    .select('id, name')
+                    .order('name')
+                if (error) throw error
+                setClasses(data || [])
+            } catch (err) {
+                console.error('Error fetching classes:', err)
+            } finally {
+                setClassesLoading(false)
+            }
+        }
+        fetchClasses()
+    }, [])
 
     const handleSubmit = async (e) => {
         e.preventDefault()
         setError('')
+
+        if (!fullName.trim()) {
+            setError('Please enter your full name.')
+            return
+        }
 
         if (password.length < 6) {
             setError('Password must be at least 6 characters long.')
@@ -29,12 +56,40 @@ function Signup() {
             return
         }
 
+        // Require class selection for students
+        if (selectedRole === 'Student' && !selectedClassId) {
+            setError('Please select your class.')
+            return
+        }
+
         setIsLoading(true)
 
         try {
-            const { data, error: signUpError } = await signUp(email, password, {
+            const metadata = {
                 full_name: fullName,
+                name: fullName,
                 role: selectedRole,
+            }
+
+            // Add class_id for students
+            if (selectedRole === 'Student' && selectedClassId) {
+                metadata.class_id = selectedClassId
+            }
+
+            // Create auth user but prevent automatic session sign-in
+            // Temporarily disable auth state listener to prevent global session override
+            
+            // Store current auth state
+            const { data: currentSession } = await supabase.auth.getSession()
+            const currentUserId = currentSession?.session?.user?.id
+            
+            const { data, error: signUpError } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: metadata,
+                    emailRedirectTo: `${window.location.origin}/login`
+                }
             })
 
             if (signUpError) {
@@ -43,7 +98,48 @@ function Signup() {
                 return
             }
 
-            setSuccess(true)
+            // Create user record in users table
+            if (data?.user) {
+                console.log('Creating user record for:', data.user.id, email, fullName);
+                
+                const userRecord = {
+                    id: data.user.id,
+                    name: fullName,
+                    email: email,
+                    role: selectedRole.toLowerCase(),
+                }
+
+                if (selectedRole === 'Student' && selectedClassId) {
+                    userRecord.class_id = selectedClassId
+                }
+
+                console.log('User record to insert:', userRecord);
+
+                const { data: insertData, error: insertError } = await supabase
+                    .from('users')
+                    .insert([userRecord])
+                    .select()
+                    .single()
+
+                if (insertError) {
+                    console.error('Error creating user record:', insertError)
+                    console.error('Full error details:', insertError.message, insertError.details, insertError.hint);
+                    setError('Account created but profile setup failed. Please contact support. Error: ' + insertError.message)
+                    setIsLoading(false)
+                    return
+                }
+                
+                console.log('User record created successfully:', insertData);
+            } else {
+                console.error('No user data returned from signup:', data);
+                setError('Account creation failed - no user data received.')
+                setIsLoading(false)
+                return
+            }
+
+            // Auto-redirect to login page after successful signup
+            // This prevents session conflicts and gives clear next steps
+            window.location.href = '/login'
         } catch (err) {
             setError('An unexpected error occurred. Please try again.')
         } finally {
@@ -111,25 +207,7 @@ function Signup() {
                         <span className="text-xl font-bold text-gray-800">EduPulse</span>
                     </Link>
 
-                    {success ? (
-                        <div className="text-center py-8">
-                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <span className="material-icons text-green-500 text-3xl">check_circle</span>
-                            </div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-3">Check Your Email</h2>
-                            <p className="text-gray-500 mb-8 max-w-sm mx-auto">
-                                We've sent a confirmation link to <span className="font-semibold text-gray-700">{email}</span>. Please verify your email to activate your account.
-                            </p>
-                            <Link
-                                to="/login"
-                                className="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg transition-colors shadow-lg shadow-blue-500/20"
-                            >
-                                <span>Go to Sign In</span>
-                                <span className="material-icons text-sm">arrow_forward</span>
-                            </Link>
-                        </div>
-                    ) : (
-                        <>
+                    <>
                             <div className="mb-8">
                                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
                                 <p className="text-gray-500">Fill in your details to get started with EduPulse.</p>
@@ -199,6 +277,38 @@ function Signup() {
                                         />
                                     </div>
                                 </div>
+
+                                {/* Class Dropdown — shown only for Students */}
+                                {selectedRole === 'Student' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="classSelect">
+                                            Select Your Class <span className="text-red-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <span className="material-icons absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+                                                class
+                                            </span>
+                                            <select
+                                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 transition-all outline-none appearance-none cursor-pointer"
+                                                id="classSelect"
+                                                value={selectedClassId}
+                                                onChange={(e) => setSelectedClassId(e.target.value)}
+                                            >
+                                                <option value="">
+                                                    {classesLoading ? 'Loading classes...' : '-- Select your class --'}
+                                                </option>
+                                                {classes.map((cls) => (
+                                                    <option key={cls.id} value={cls.id}>
+                                                        {cls.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <span className="material-icons absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg pointer-events-none">
+                                                expand_more
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="signup-password">
@@ -270,7 +380,6 @@ function Signup() {
                                 </Link>
                             </p>
                         </>
-                    )}
                 </div>
             </div>
 

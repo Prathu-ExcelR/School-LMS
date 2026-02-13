@@ -95,7 +95,12 @@ function AdminSubjects() {
                   <tr key={subject.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4 text-sm font-medium text-slate-800">{subject.name}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{subject.class?.name || 'N/A'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">-</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {subject.assignments?.length > 0
+                        ? subject.assignments.map(a => a.teacher?.name).join(', ')
+                        : (subject.teacher?.name || '-')
+                      }
+                    </td>
                     <td className="px-6 py-4">
                       <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
                         {subject.status}

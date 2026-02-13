@@ -175,7 +175,7 @@ export const getUnitDetails = async (unitId) => {
       quizzes(*)
     `)
     .eq('id', unitId)
-    .single()
+    .maybeSingle()
   
   if (error) throw error
   return data
@@ -200,9 +200,12 @@ export const updateUnit = async (unitId, updates) => {
     .update(updates)
     .eq('id', unitId)
     .select()
-    .single()
+    .maybeSingle()
   
   if (error) throw error
+  if (!data) {
+    throw new Error('Failed to update unit. Unit not found or you do not have permission.')
+  }
   return data
 }
 
@@ -303,9 +306,12 @@ export const createMaterial = async (materialData) => {
     .from('materials')
     .insert([materialData])
     .select()
-    .single()
+    .maybeSingle()
   
   if (error) throw error
+  if (!data) {
+    throw new Error('Failed to create material. This may be due to Row Level Security policies.')
+  }
   return data
 }
 
@@ -340,9 +346,12 @@ export const updateMaterial = async (materialId, updates) => {
     .update(updates)
     .eq('id', materialId)
     .select()
-    .single()
+    .maybeSingle()
   
   if (error) throw error
+  if (!data) {
+    throw new Error('Failed to update material. Material not found or you do not have permission.')
+  }
   return data
 }
 
@@ -354,6 +363,168 @@ export const deleteMaterial = async (materialId) => {
     .eq('id', materialId)
   
   if (error) throw error
+}
+
+// Get teacher's quizzes
+export const getTeacherQuizzes = async (teacherId, unitId = null) => {
+  try {
+    // First get teacher's units
+    const { data: units, error: unitsError } = await supabase
+      .from('units')
+      .select('id')
+      .eq('teacher_id', teacherId)
+    
+    if (unitsError) {
+      console.error('Units query error:', unitsError)
+      if (unitsError.code === '42P01') { // undefined_table error
+        return []
+      }
+      throw unitsError
+    }
+    
+    if (!units || units.length === 0) {
+      return []
+    }
+    
+    const unitIds = units.map(unit => unit.id)
+    
+    // Then get quizzes for those units
+    let query = supabase
+      .from('quizzes')
+      .select(`
+        *,
+        unit:units(id, name, subject:subjects(id, name))
+      `)
+      
+    query = query.in('unit_id', unitIds)
+    
+    if (unitId) {
+      query = query.eq('unit_id', unitId)
+    }
+    
+    const { data, error } = await query
+    
+    if (error) {
+      console.error('Quizzes query error:', error)
+      if (error.code === '42P01') { // undefined_table error
+        return []
+      }
+      throw error
+    }
+    
+    // Get quiz attempt statistics
+    const quizIds = data.map(quiz => quiz.id)
+    let attemptStats = {}
+    
+    if (quizIds.length > 0) {
+      const { data: attempts } = await supabase
+        .from('student_quiz_attempts')
+        .select('quiz_id, score, passed')
+        .in('quiz_id', quizIds)
+      
+      // Calculate statistics per quiz
+      attempts?.forEach(attempt => {
+        if (!attemptStats[attempt.quiz_id]) {
+          attemptStats[attempt.quiz_id] = { total: 0, passed: 0, scores: [] }
+        }
+        attemptStats[attempt.quiz_id].total++
+        if (attempt.passed) attemptStats[attempt.quiz_id].passed++
+        if (attempt.score) attemptStats[attempt.quiz_id].scores.push(attempt.score)
+      })
+    }
+    
+    return data.map(quiz => {
+      const stats = attemptStats[quiz.id] || { total: 0, passed: 0, scores: [] }
+      const avgScore = stats.scores.length > 0 
+        ? Math.round(stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length)
+        : 0
+      
+      return {
+        id: quiz.id,
+        title: quiz.title,
+        unit_id: quiz.unit_id,
+        unit: quiz.unit?.name || 'Unknown Unit',
+        subject: quiz.unit?.subject?.name || 'Unknown Subject',
+        questions: quiz.total_questions || 0,
+        passingMarks: quiz.passing_score || 70,
+        attempted: stats.total,
+        passed: stats.passed,
+        avgScore: avgScore > 0 ? `${avgScore}%` : '0%',
+        timeLimit: quiz.time_limit || 0
+      }
+    })
+  } catch (error) {
+    console.error('Error in getTeacherQuizzes:', error)
+    return []
+  }
+}
+
+// Create new quiz
+export const createQuiz = async (quizData) => {
+  const { data, error } = await supabase
+    .from('quizzes')
+    .insert([quizData])
+    .select()
+    .maybeSingle()
+  
+  if (error) throw error
+  if (!data) {
+    throw new Error('Failed to create quiz. This may be due to Row Level Security policies preventing the insert. Please ensure you have permission to create quizzes for this unit.')
+  }
+  return data
+}
+
+// Update quiz
+export const updateQuiz = async (quizId, updates) => {
+  const { data, error } = await supabase
+    .from('quizzes')
+    .update(updates)
+    .eq('id', quizId)
+    .select()
+    .maybeSingle()
+  
+  if (error) throw error
+  if (!data) {
+    throw new Error('Failed to update quiz. Quiz not found or you do not have permission.')
+  }
+  return data
+}
+
+// Delete quiz
+export const deleteQuiz = async (quizId) => {
+  const { error } = await supabase
+    .from('quizzes')
+    .delete()
+    .eq('id', quizId)
+  
+  if (error) throw error
+}
+
+// Get quiz questions
+export const getQuizQuestions = async (quizId) => {
+  const { data, error } = await supabase
+    .from('quiz_questions')
+    .select('*')
+    .eq('quiz_id', quizId)
+    .order('order_number', { ascending: true })
+  
+  if (error) throw error
+  return data
+}
+
+// Create quiz question
+export const createQuizQuestion = async (questionData) => {
+  const { data, error } = await supabase
+    .from('quiz_questions')
+    .insert([questionData])
+    .select()
+    .maybeSingle()
+  
+  if (error) throw error
+  if (!data) {
+    throw new Error('Failed to create quiz question. This may be due to Row Level Security policies.')
+  }
+  return data
 }
 
 // Teacher login verification

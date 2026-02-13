@@ -16,9 +16,9 @@ function Login() {
 
   // Map role to dashboard route
   const roleRedirects = {
-    Student: '/dashboard',
+    Student: '/student/dashboard',
     Teacher: '/teacher/dashboard',
-    Parent: '/dashboard',
+    Parent: '/student/dashboard',
     Admin: '/admin/dashboard',
   }
 
@@ -36,15 +36,42 @@ function Login() {
         return
       }
 
-      // Get user role from database
-      const { data: userData, error: userError } = await supabase
+      // Debug: Check if user exists in users table
+      console.log('Attempting to fetch user data for ID:', data.user.id);
+      
+      // First check if user record exists (allow multiple results to see duplicates)
+      const { data: userRecords, error: existsError } = await supabase
         .from('users')
-        .select('role')
+        .select('id, email, name, role')
         .eq('id', data.user.id)
-        .single()
 
-      if (userError) {
-        setError('Unable to fetch user data')
+      if (existsError) {
+        console.error('Error checking user existence:', existsError)
+      }
+      
+      console.log('User records found:', userRecords);
+      console.log('Number of user records:', userRecords?.length || 0);
+
+      if (!userRecords || userRecords.length === 0) {
+        setError(`User account not found in system. Please contact support. User ID: ${data.user.id}`)
+        setIsLoading(false)
+        return
+      }
+
+      if (userRecords.length > 1) {
+        console.error('Multiple user records found for same ID:', userRecords)
+        setError(`Duplicate user records found. Please contact support.`)
+        setIsLoading(false)
+        return
+      }
+
+      // Get user role from the single record
+      const userData = userRecords[0]
+      const userError = null
+
+      if (!userData.role) {
+        console.error('User record missing role:', userData)
+        setError(`User record incomplete - missing role. Please contact support.`)
         setIsLoading(false)
         return
       }
@@ -63,9 +90,9 @@ function Login() {
 
       // Redirect based on database role
       const roleMap = {
-        'student': '/dashboard',
+        'student': '/student/dashboard',
         'teacher': '/teacher/dashboard',
-        'parent': '/dashboard',
+        'parent': '/student/dashboard',
         'admin': '/admin/dashboard'
       }
       
